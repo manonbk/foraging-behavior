@@ -10,7 +10,3 @@ imageio-ffmpeg>=0.4.9
 Pillow>=10.0
 tqdm>=4.66
 tables>=3.9
-
-# The upstream `movie` module is not part of this repository or a PyPI dependency.
-# Provide it separately for movie-opening and video-annotation features.
-# Optional trajectory-linking integrations: trackpy, norfair.

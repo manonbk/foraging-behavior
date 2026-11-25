@@ -11,36 +11,36 @@ Pour chaque départ et chaque horizon, on regarde si la trajectoire
 Les IC sont obtenus par bootstrap sur les id (pas sur les départs).
 
 """
-import argparse
+import os
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from interface import ask_open_tracking_file, guess_or_ask_fps_and_pixelsize
 from trajectories.magic_loading import magic_load_trajectories
 from trajectories.trajectory_analysis import scale_lengths, segments_from_table
-import os
+from .common import setup
 
 
 # -------------------------------
 # CONSTANTS
 # -------------------------------
 
-R_IN=100
-R_OUT=200
-SMOOTH=4
-MIN_STOP=10 #minimum de durée dun stop, s
-MIN_SWIM=10 #minimum de durée dun swim, s
-SWIM_STEP=10 #espacement des départs, s
-horizons=[10,20,30,50,100] #temps de trajectoire a analyser, s
-mode="time"
-N_BOOT=200
-SEED=0
-OUT="return_results"
-block_seconds=100
-cluster="segment"
-N_PERM=5000
-MIN_REMAINING=100  # s : durée min d'enregistrement restante après un départ (limite le biais de censure ; 0 = désactivé)
+R_IN = 100
+R_OUT = 200
+SMOOTH = 4
+MIN_STOP = 10  # minimum stop duration (s)
+MIN_SWIM = 10  # minimum swim duration (s)
+SWIM_STEP = 10  # spacing between swim starts (s)
+HORIZONS = [10, 20, 30, 50, 100]  # trajectory horizons (s)
+MODE = "time"
+N_BOOT = 200
+SEED = 0
+OUT = "return_results"
+BLOCK_SECONDS = 100
+CLUSTER = "segment"
+N_PERM = 5000
+MIN_REMAINING = 100  # minimum recording time remaining after a start (s); 0 disables it
 
 
 # --------------------------------------------------------------------------
@@ -107,7 +107,7 @@ def process_piece(piece, fps, seg_idx=0):
     pid = piece["id"].iloc[0]
     frames = piece["frame"].to_numpy()
     n = len(x)
-    block_f = max(1, int(round(block_seconds * fps)))
+    block_f = max(1, int(round(BLOCK_SECONDS * fps)))
 
     step = np.hypot(np.diff(x), np.diff(y))
     cum = np.concatenate([[0.0], np.cumsum(step)])  # longueur parcourue cumulée
@@ -121,17 +121,17 @@ def process_piece(piece, fps, seg_idx=0):
 
     rows = []
     for cond, i in starts:
-        for h in horizons:
-            if mode == "time":
+        for h in HORIZONS:
+            if MODE == "time":
                 end = i + max(1, int(round(h * fps)))
             else:
                 end = int(np.searchsorted(cum, cum[i] + h))
             if end >= n or end <= i:
                 continue  # fenêtre incomplète : on n'inclut pas (même critère pour les 2 conditions)
             r = window_metrics(x, y, i, end, R_IN, R_OUT)
-            if cluster == "id":
+            if CLUSTER == "id":
                 cl = str(pid)
-            elif cluster == "segment":
+            elif CLUSTER == "segment":
                 cl = f"{pid}_seg{seg_idx}"
             else:  # blocs de temps
                 cl = f"{pid}_blk{int(frames[i]) // block_f}"
@@ -263,8 +263,6 @@ def summarize(df, n_boot, rng, n_perm=5000):
 
 
 def plot(summary, path):
-    import matplotlib.pyplot as plt
-
     fig, ax = plt.subplots(figsize=(5, 4))
     for cond, col in (("stop", "tab:red"), ("swim", "tab:blue")):
         p = summary[f"p_return_{cond}"]
@@ -275,7 +273,7 @@ def plot(summary, path):
         ax.annotate(f"n={int(r.n_stop_left)}", (r.horizon, r.p_return_stop),
                     textcoords="offset points", xytext=(0, 8), ha="center",
                     fontsize=7, color="tab:red")
-    ax.set_xlabel("horizon (s)" if mode == "time" else "longueur parcourue")
+    ax.set_xlabel("horizon (s)" if MODE == "time" else "longueur parcourue")
     ax.set_ylabel("P(retour | parti)")
     ax.set_ylim(0, 1)
     ax.legend()
@@ -412,8 +410,6 @@ def print_return_times(events):
 
 def plot_stop_return(summary, path, error="wilson"):
     """error='wilson' (IC 95 %, conseillé) ou 'se' (écart type de la proportion, sqrt(p(1-p)/n))."""
-    import matplotlib.pyplot as plt
-
     fig, ax = plt.subplots(figsize=(3.5, 4))
     labels = {"stop": "départ stop", "swim": "départ swim"}
     for xpos, (_, r) in enumerate(summary.iterrows()):
@@ -439,51 +435,62 @@ def run_stop_return(table, fps, plot_dir):
     if events.empty:
         print("Stop-return : aucun départ valide (MIN_REMAINING trop grand ?)")
         return
-    events.to_csv(f"{plot_dir}/{OUT}_stop_return_events.csv", index=False)
+    events.to_csv(os.path.join(plot_dir, f"{OUT}_stop_return_events.csv"), index=False)
     with pd.option_context("display.width", 200, "display.max_columns", None,
                            "display.float_format", "{:.3f}".format):
         for tag, col, label in (("all", "stopped_there", "tous les arrêts"),
                                 ("skip_first", "stopped_there_skip", "sans le 1er arrêt")):
             summ = summarize_stop_return(events, col)
-            summ.to_csv(f"{plot_dir}/{OUT}_stop_return_summary_{tag}.csv", index=False)
+            summ.to_csv(
+                os.path.join(plot_dir, f"{OUT}_stop_return_summary_{tag}.csv"),
+                index=False,
+            )
             print(f"\nP(arrêt au même endroit) - {label}")
             print(summ)
-            plot_stop_return(summ, f"{plot_dir}/{OUT}_stop_return_plot_{tag}.png")
+            plot_stop_return(
+                summ,
+                os.path.join(plot_dir, f"{OUT}_stop_return_plot_{tag}.png"),
+            )
     print_return_times(events)
 
 
 def main():
-    filename = ask_open_tracking_file()
-    FPS, PIXEL_SIZE_UM = guess_or_ask_fps_and_pixelsize(filename)
-    folder = os.path.dirname(os.path.abspath(filename))
-    PLOT_DIR = os.path.abspath(f"{folder}/return_analysis")
-    os.makedirs(PLOT_DIR, exist_ok=True)
-    table = magic_load_trajectories(filename, link=False)
-    scale_lengths(table, PIXEL_SIZE_UM, FPS)
+    """Run return analyses and save outputs beside the A01-A04 results."""
+    cfg = setup()
+    if not cfg.filename:
+        raise RuntimeError("No tracking file was selected.")
 
-    run_stop_return(table, FPS, PLOT_DIR)
+    table = magic_load_trajectories(cfg.filename, link=False)
+    required = {"id", "frame", "x", "y", "stop", "swim"}
+    missing = required - set(table.columns)
+    if missing:
+        raise ValueError(
+            "The selected tracking file is missing required columns: "
+            f"{sorted(missing)}"
+        )
+    scale_lengths(table, cfg.pixel_size_um, cfg.fps)
+
+    run_stop_return(table, cfg.fps, cfg.plot_dir)
 
     segments = segments_from_table(table)
     rows = []
     for k, piece in enumerate(iter_pieces(segments)):
-        rows += process_piece(piece, FPS, k)
+        rows += process_piece(piece, cfg.fps, k)
     if not rows:
         raise SystemExit("Aucun départ valide trouvé (horizons trop longs ? min-stop trop grand ?)")
 
     df = pd.DataFrame(rows)
-    df.to_csv(f"{PLOT_DIR}/{OUT}_events.csv", index=False)
+    df.to_csv(os.path.join(cfg.plot_dir, f"{OUT}_events.csv"), index=False)
 
     rng = np.random.default_rng(SEED)
     summary = summarize(df, N_BOOT, rng, N_PERM)
-    summary.to_csv(f"{PLOT_DIR}/{OUT}_summary.csv", index=False)
+    summary.to_csv(os.path.join(cfg.plot_dir, f"{OUT}_summary.csv"), index=False)
     with pd.option_context("display.width", 200, "display.max_columns", None,
                            "display.float_format", "{:.3f}".format):
         print(summary)
 
-    try:
-        plot(summary, f"{PLOT_DIR}/{OUT}_plot.png")
-    except ImportError:
-        print("matplotlib absent : pas de figure")
+    plot(summary, os.path.join(cfg.plot_dir, f"{OUT}_plot.png"))
+    plt.show()
 
 
 if __name__ == "__main__":

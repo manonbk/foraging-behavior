@@ -40,6 +40,7 @@ Run package scripts from the repository root with `python -m`, for example:
 python -m preprocess.preprocess_single_cell
 python -m behavior_analysis.A01_swim_stop
 python -m behavior_analysis.A02_durations
+python -m behavior_analysis.A05_return
 python -m HMM.HMM_fit
 ```
 

@@ -1,14 +1,16 @@
 """
-Shared helpers for the movement analysis scripts (A01 -> A04).
+Shared helpers for the movement analysis scripts (A01 -> A05).
 
 Pipeline
     A01_swim_stop.py          detect: speed per bin, stops / swims  -> speed_table.csv, stops.csv, swims.csv
     A02_durations.py          how long: stop / swim durations, survival and hazard of stops
     A03_speed_dynamics.py     how: swim <-> stop transitions, return map, autocorrelation
     A04_spatial_occupancy.py  where: occupancy maps (all / swim / stop)
+    A05_return.py             whether a paramecium returns to a previous location
 
-Everything after A01 only reads what A01 wrote in <data folder>/movement_analysis/.
-The computations themselves live in speed_core.py.
+A02-A04 read the tables written by A01 from <data folder>/movement_analysis/.
+A05_return.py analyzes per-frame tracking files with stop and swim columns.
+The speed computations themselves live in speed_core.py.
 """
 
 import os

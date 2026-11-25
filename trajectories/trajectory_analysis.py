@@ -148,12 +148,12 @@ def scale_lengths(table, pixel_size, fps):
         table['length'] = table['length']*pixel_size
         if 'width' in table:
             table['width'] = table['width']*pixel_size
-    if fps!=1:
-        if 'speed' in table:
-            table['speed']*=fps
-        if 'vx' in table :
-            table['vx']*=fps
-            table['vy']*=fps
+    # if fps!=1:
+    #     if 'speed' in table:
+    #         table['speed']*=fps
+    #     if 'vx' in table :
+    #         table['vx']*=fps
+    #         table['vy']*=fps
 
 def calculate_features(segment):
     '''

@@ -1,1 +1,5 @@
 .venv/
+interface/__pycache__/
+behavior_analysis/__pycache__/
+HMM/__pycache__/
+trajectories/__pycache__/
